@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Login | Jaissri Decoration</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Outfit:wght@300;400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <style>
+    :root {
+      --g1: #0a2e1a; --g-accent: #1a6b3c; --g-glow: #2ecc71;
+      --b1: #020c1b; --b-accent: #1a3a6b;
+      --text: #e8f5ee; --text-muted: #7ab893; --border: rgba(46,204,113,0.15);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: linear-gradient(160deg, var(--g1) 0%, var(--b1) 50%, var(--g1) 100%);
+      color: var(--text); min-height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .login-box {
+      background: rgba(10,46,26,0.3); border: 1px solid var(--border);
+      border-radius: 1.5rem; padding: 2.5rem; width: 100%; max-width: 420px;
+      backdrop-filter: blur(20px); text-align: center;
+    }
+    .login-logo {
+      width: 70px; height: 70px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--g-accent), var(--b-accent));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.8rem; color: #fff; margin: 0 auto 1.5rem;
+      border: 2px solid rgba(46,204,113,0.3);
+    }
+    h2 { font-family: 'Cormorant Garamond', serif; font-size: 2rem; margin-bottom: 0.3rem; }
+    p { color: var(--text-muted); font-size: 0.88rem; margin-bottom: 2rem; font-weight: 300; }
+    .error-msg {
+      background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3);
+      color: #fca5a5; padding: 0.8rem; border-radius: 0.8rem; margin-bottom: 1.2rem;
+      font-size: 0.88rem; display: none;
+    }
+    .error-msg.show { display: block; }
+    .form-group { margin-bottom: 1.2rem; text-align: left; }
+    label { display: block; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.4rem; letter-spacing: 0.05em; }
+    input {
+      width: 100%; background: rgba(2,12,27,0.6); border: 1px solid var(--border);
+      color: var(--text); padding: 0.85rem 1rem; border-radius: 0.8rem;
+      font-family: 'Outfit', sans-serif; font-size: 0.93rem; outline: none; transition: all 0.3s;
+    }
+    input:focus { border-color: var(--g-glow); box-shadow: 0 0 0 3px rgba(46,204,113,0.1); }
+    input::placeholder { color: rgba(122,184,147,0.4); }
+    button {
+      width: 100%; background: linear-gradient(135deg, var(--g-accent), var(--b-accent));
+      color: #fff; border: none; padding: 1rem; border-radius: 50px;
+      font-size: 1rem; font-weight: 500; cursor: pointer; transition: all 0.3s;
+      font-family: 'Outfit', sans-serif; display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+    }
+    button:hover { box-shadow: 0 8px 30px rgba(46,204,113,0.4); transform: translateY(-2px); }
+    .back-link { margin-top: 1.5rem; display: block; color: var(--text-muted); text-decoration: none; font-size: 0.85rem; transition: color 0.3s; }
+    .back-link:hover { color: var(--g-glow); }
+  </style>
+</head>
+<body>
+  <div class="login-box">
+    <div class="login-logo"><i class="fas fa-leaf"></i></div>
+    <h2>Admin Login</h2>
+    <p>Jaissri Decoration Management Panel</p>
+    <div class="error-msg" id="errorMsg"><i class="fas fa-exclamation-circle"></i> Invalid username or password.</div>
+    <form method="POST" action="/admin/login">
+      <div class="form-group">
+        <label>Username</label>
+        <input type="text" name="username" placeholder="admin" required autofocus />
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" name="password" placeholder="••••••••" required />
+      </div>
+      <button type="submit"><i class="fas fa-sign-in-alt"></i> Login</button>
+    </form>
+    <a href="/" class="back-link">← Back to Website</a>
+  </div>
+  <script>
+    if (new URLSearchParams(location.search).get('error')) {
+      document.getElementById('errorMsg').classList.add('show');
+    }
+  </script>
+</body>
+</html>
