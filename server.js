@@ -21,24 +21,95 @@ app.use(session({
 const ADMIN_USER = 'Jaissri';
 const ADMIN_PASS = 'HEXLUR';
 
-// Ensure folders exist
-['public/gallery', 'public/uploads/feedback', 'data'].forEach(dir => {
+// ===== STORAGE PATHS =====
+const GALLERY_DIR   = 'public/gallery';           // images live here
+const GALLERY_META  = 'data/gallery-meta';        // one .json per image
+const FEEDBACK_DIR  = 'data/feedbacks';           // one folder per feedback
+const FEEDBACK_IMG  = 'public/uploads/feedback';  // feedback avatars
+
+// Ensure all folders exist
+[GALLERY_DIR, GALLERY_META, FEEDBACK_DIR, FEEDBACK_IMG].forEach(dir => {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 
-// Gallery image storage
+// ===== STORAGE HELPERS =====
+
+/**
+ * Gallery: each uploaded image gets a sidecar meta file at
+ *   data/gallery-meta/<filename>.json
+ * Reading the gallery = reading all those .json files.
+ */
+function readGallery() {
+  return fs.readdirSync(GALLERY_META)
+    .filter(f => f.endsWith('.json'))
+    .map(f => {
+      try {
+        return JSON.parse(fs.readFileSync(path.join(GALLERY_META, f), 'utf8'));
+      } catch { return null; }
+    })
+    .filter(Boolean)
+    .sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt));
+}
+
+function writeGalleryMeta(filename, meta) {
+  fs.writeFileSync(
+    path.join(GALLERY_META, `${filename}.json`),
+    JSON.stringify(meta, null, 2)
+  );
+}
+
+function deleteGalleryMeta(filename) {
+  const metaPath = path.join(GALLERY_META, `${filename}.json`);
+  if (fs.existsSync(metaPath)) fs.unlinkSync(metaPath);
+}
+
+/**
+ * Feedbacks: each feedback lives in its own folder:
+ *   data/feedbacks/<id>/meta.json
+ *   data/feedbacks/<id>/avatar.<ext>   (optional, copied here from public/uploads/feedback)
+ *
+ * The avatar is ALSO kept in public/uploads/feedback/ so it's web-accessible.
+ */
+function readFeedbacks() {
+  if (!fs.existsSync(FEEDBACK_DIR)) return [];
+  return fs.readdirSync(FEEDBACK_DIR)
+    .filter(name => {
+      const p = path.join(FEEDBACK_DIR, name);
+      return fs.statSync(p).isDirectory();
+    })
+    .map(name => {
+      const metaPath = path.join(FEEDBACK_DIR, name, 'meta.json');
+      try {
+        return JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+      } catch { return null; }
+    })
+    .filter(Boolean)
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+}
+
+function writeFeedback(feedback) {
+  const dir = path.join(FEEDBACK_DIR, String(feedback.id));
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify(feedback, null, 2));
+}
+
+function deleteFeedback(id) {
+  const dir = path.join(FEEDBACK_DIR, String(id));
+  if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
+}
+
+// ===== MULTER =====
+
 const galleryStorage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, 'public/gallery/'),
+  destination: (req, file, cb) => cb(null, GALLERY_DIR),
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname);
-    const name = `${Date.now()}-${Math.round(Math.random() * 1e6)}${ext}`;
-    cb(null, name);
+    cb(null, `${Date.now()}-${Math.round(Math.random() * 1e6)}${ext}`);
   }
 });
 
-// Feedback image storage
 const feedbackStorage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, 'public/uploads/feedback/'),
+  destination: (req, file, cb) => cb(null, FEEDBACK_IMG),
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname);
     cb(null, `${Date.now()}-feedback${ext}`);
@@ -47,55 +118,37 @@ const feedbackStorage = multer.diskStorage({
 
 const uploadGallery = multer({
   storage: galleryStorage,
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) cb(null, true);
-    else cb(new Error('Only images allowed'));
-  },
+  fileFilter: (req, file, cb) =>
+    file.mimetype.startsWith('image/') ? cb(null, true) : cb(new Error('Only images allowed')),
   limits: { fileSize: 10 * 1024 * 1024 }
 });
 
 const uploadFeedback = multer({
   storage: feedbackStorage,
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) cb(null, true);
-    else cb(new Error('Only images allowed'));
-  },
+  fileFilter: (req, file, cb) =>
+    file.mimetype.startsWith('image/') ? cb(null, true) : cb(new Error('Only images allowed')),
   limits: { fileSize: 5 * 1024 * 1024 }
 });
 
-// Auth middleware
+// ===== AUTH =====
+
 function requireAuth(req, res, next) {
   if (req.session && req.session.admin) return next();
   res.redirect('/admin/login');
 }
 
-// ===== ROUTES =====
+// ===== PUBLIC API =====
 
-// Public: get gallery manifest
 app.get('/api/gallery', (req, res) => {
-  const galleryDir = 'public/gallery';
-  const manifestFile = 'data/gallery-manifest.json';
-
-  let manifest = [];
-  if (fs.existsSync(manifestFile)) {
-    manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
-  }
-  res.json(manifest);
+  res.json(readGallery());
 });
 
-// Public: get feedbacks
 app.get('/api/feedbacks', (req, res) => {
-  const file = 'data/feedbacks.json';
-  if (fs.existsSync(file)) {
-    res.json(JSON.parse(fs.readFileSync(file, 'utf8')));
-  } else {
-    res.json([]);
-  }
+  res.json(readFeedbacks());
 });
 
 // ===== ADMIN ROUTES =====
 
-// Login page
 app.get('/admin/login', (req, res) => {
   if (req.session.admin) return res.redirect('/admin');
   res.sendFile(path.join(__dirname, 'views/admin-login.html'));
@@ -116,99 +169,92 @@ app.get('/admin/logout', (req, res) => {
   res.redirect('/admin/login');
 });
 
-// Admin dashboard
 app.get('/admin', requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'views/admin.html'));
 });
 
-// Upload gallery images
+// Upload gallery images — writes image + sidecar .json per file
 app.post('/admin/upload-gallery', requireAuth, uploadGallery.array('images', 20), (req, res) => {
-  const manifestFile = 'data/gallery-manifest.json';
-  let manifest = [];
-  if (fs.existsSync(manifestFile)) {
-    manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
-  }
+  const category = req.body.category || 'wedding';
+  const title    = req.body.title || 'Event Photo';
+  const label    = category.charAt(0).toUpperCase() + category.slice(1);
 
-  const categories = ['wedding', 'birthday', 'corporate', 'babyshower', 'festive'];
   req.files.forEach(file => {
-    manifest.push({
+    const meta = {
       src: `/gallery/${file.filename}`,
-      cat: req.body.category || 'wedding',
-      title: req.body.title || 'Event Photo',
-      label: req.body.category ? req.body.category.charAt(0).toUpperCase() + req.body.category.slice(1) : 'Wedding',
+      filename: file.filename,
+      cat: category,
+      title,
+      label,
       uploadedAt: new Date().toISOString()
-    });
+    };
+    writeGalleryMeta(file.filename, meta);  // data/gallery-meta/<filename>.json
   });
 
-  fs.writeFileSync(manifestFile, JSON.stringify(manifest, null, 2));
   res.json({ success: true, count: req.files.length });
 });
 
-// Delete gallery image
+// Delete gallery image + its sidecar meta file
 app.delete('/admin/gallery/:filename', requireAuth, (req, res) => {
   const filename = req.params.filename;
-  const filePath = `public/gallery/${filename}`;
-  const manifestFile = 'data/gallery-manifest.json';
+  const imagePath = path.join(GALLERY_DIR, filename);
 
-  if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-
-  if (fs.existsSync(manifestFile)) {
-    let manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
-    manifest = manifest.filter(m => !m.src.includes(filename));
-    fs.writeFileSync(manifestFile, JSON.stringify(manifest, null, 2));
-  }
+  if (fs.existsSync(imagePath)) fs.unlinkSync(imagePath);
+  deleteGalleryMeta(filename);
 
   res.json({ success: true });
 });
 
-// Add feedback (with optional image)
+// Add feedback — saves meta.json inside its own folder; avatar stays web-accessible
 app.post('/admin/add-feedback', requireAuth, uploadFeedback.single('avatar'), (req, res) => {
-  const feedbackFile = 'data/feedbacks.json';
-  let feedbacks = [];
-  if (fs.existsSync(feedbackFile)) {
-    feedbacks = JSON.parse(fs.readFileSync(feedbackFile, 'utf8'));
-  }
+  const id = Date.now();
 
   const feedback = {
-    id: Date.now(),
-    name: req.body.name,
-    role: req.body.role || 'Client',
-    stars: parseInt(req.body.stars) || 5,
-    text: req.body.text,
-    avatar: req.file ? `/uploads/feedback/${req.file.filename}` : null,
+    id,
+    name:      req.body.name,
+    role:      req.body.role || 'Client',
+    stars:     parseInt(req.body.stars) || 5,
+    text:      req.body.text,
+    avatar:    req.file ? `/uploads/feedback/${req.file.filename}` : null,
     createdAt: new Date().toISOString()
   };
 
-  feedbacks.unshift(feedback);
-  fs.writeFileSync(feedbackFile, JSON.stringify(feedbacks, null, 2));
-  res.json({ success: true });
-});
-
-// Delete feedback
-app.delete('/admin/feedback/:id', requireAuth, (req, res) => {
-  const feedbackFile = 'data/feedbacks.json';
-  if (!fs.existsSync(feedbackFile)) return res.json({ success: true });
-
-  let feedbacks = JSON.parse(fs.readFileSync(feedbackFile, 'utf8'));
-  const fb = feedbacks.find(f => f.id == req.params.id);
-  if (fb && fb.avatar) {
-    const filePath = `public${fb.avatar}`;
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  // If avatar was uploaded, also copy it into the feedback's own folder for permanence
+  if (req.file) {
+    const feedbackFolder = path.join(FEEDBACK_DIR, String(id));
+    if (!fs.existsSync(feedbackFolder)) fs.mkdirSync(feedbackFolder, { recursive: true });
+    fs.copyFileSync(
+      path.join(FEEDBACK_IMG, req.file.filename),
+      path.join(feedbackFolder, req.file.filename)
+    );
   }
-  feedbacks = feedbacks.filter(f => f.id != req.params.id);
-  fs.writeFileSync(feedbackFile, JSON.stringify(feedbacks, null, 2));
+
+  writeFeedback(feedback);  // data/feedbacks/<id>/meta.json
   res.json({ success: true });
 });
 
-// Get admin stats
-app.get('/admin/stats', requireAuth, (req, res) => {
-  const manifestFile = 'data/gallery-manifest.json';
-  const feedbackFile = 'data/feedbacks.json';
+// Delete feedback folder (meta + avatar copy) and web-accessible avatar
+app.delete('/admin/feedback/:id', requireAuth, (req, res) => {
+  const feedbacks = readFeedbacks();
+  const fb = feedbacks.find(f => f.id == req.params.id);
 
-  const galleryCount = fs.existsSync(manifestFile)
-    ? JSON.parse(fs.readFileSync(manifestFile, 'utf8')).length : 0;
-  const feedbackCount = fs.existsSync(feedbackFile)
-    ? JSON.parse(fs.readFileSync(feedbackFile, 'utf8')).length : 0;
+  if (fb && fb.avatar) {
+    const webPath = path.join('public', fb.avatar);
+    if (fs.existsSync(webPath)) fs.unlinkSync(webPath);
+  }
+
+  deleteFeedback(req.params.id);  // removes data/feedbacks/<id>/ entirely
+  res.json({ success: true });
+});
+
+// Stats
+app.get('/admin/stats', requireAuth, (req, res) => {
+  const galleryCount  = fs.existsSync(GALLERY_META)
+    ? fs.readdirSync(GALLERY_META).filter(f => f.endsWith('.json')).length : 0;
+  const feedbackCount = fs.existsSync(FEEDBACK_DIR)
+    ? fs.readdirSync(FEEDBACK_DIR).filter(name =>
+        fs.statSync(path.join(FEEDBACK_DIR, name)).isDirectory()
+      ).length : 0;
 
   res.json({ galleryCount, feedbackCount });
 });
