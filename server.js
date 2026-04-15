@@ -18,8 +18,8 @@ app.use(session({
 }));
 
 // Admin credentials (change these!)
-const ADMIN_USER = 'admin';
-const ADMIN_PASS = 'jaissri@2026';
+const ADMIN_USER = 'Jaissri';
+const ADMIN_PASS = 'HEXLUR';
 
 // Ensure folders exist
 ['public/gallery', 'public/uploads/feedback', 'data'].forEach(dir => {
